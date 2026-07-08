@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { parse } from "./parser/parser";
+import { generateFlowchart } from "./parser/flowchartGenerator";
 
 import Header from "./components/Header";
 import Toolbar from "./components/Toolbar";
@@ -19,6 +20,11 @@ function App() {
 
   const [mipsCode, setMipsCode] = useState(starterCode);
   
+  const [flowchart, setFlowchart] = useState({
+    nodes: [],
+    edges: [],
+});
+
   const fileInputRef = useRef(null);
   
  const handleOpen = () => {
@@ -44,9 +50,11 @@ const handleFileSelected = (event) => {
 
  const handleGenerate = () => {
 
-    const result = parse(mipsCode);
+    const parsed = parse(mipsCode);
 
-    console.log(result);
+    const chart = generateFlowchart(parsed);
+
+    setFlowchart(chart);
 
 };
 
@@ -77,7 +85,10 @@ const handleFileSelected = (event) => {
             code={mipsCode}
             setCode={setMipsCode}
         />
-        <FlowchartCanvas />
+       <FlowchartCanvas
+         nodes={flowchart.nodes}
+         edges={flowchart.edges}
+        />
       </main>
 
       <ExplanationPanel />
