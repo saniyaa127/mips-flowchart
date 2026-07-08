@@ -1,3 +1,4 @@
+import { instructionMap } from "./instructionMap";
 export function generateFlowchart(parsedInstructions) {
     const nodes = [];
     const edges = [];
@@ -23,13 +24,17 @@ export function generateFlowchart(parsedInstructions) {
             return;
         }
 
+        const info = instructionMap[instruction.opcode] || {
+         shape: "process",
+         description: "Unknown instruction"
+        };
         const id = `node-${index}`;
 
         nodes.push({
             id,
             position: { x: 250, y },
             data: {
-                label: instruction.opcode,
+                label: `${instruction.opcode}\n${instruction.operands.join(", ")}`,
             },
         });
 

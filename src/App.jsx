@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { parse } from "./parser/parser";
 import { generateFlowchart } from "./parser/flowchartGenerator";
+import { buildLabelTable } from "./parser/labelTable";
 
 import Header from "./components/Header";
 import Toolbar from "./components/Toolbar";
@@ -48,14 +49,20 @@ const handleFileSelected = (event) => {
     setMipsCode(starterCode);
   };
 
- const handleGenerate = () => {
+const handleGenerate = () => {
+  const parsed = parse(mipsCode);
 
-    const parsed = parse(mipsCode);
+  console.log("Parsed Instructions:", parsed);
 
-    const chart = generateFlowchart(parsed);
+  const labels = buildLabelTable(parsed);
 
-    setFlowchart(chart);
+  console.log("Label Table:", labels);
 
+  const chart = generateFlowchart(parsed);
+
+  console.log("Generated Flowchart:", chart);
+
+  setFlowchart(chart);
 };
 
   const handleClear = () => {
