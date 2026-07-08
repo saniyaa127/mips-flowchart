@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { parse } from "./parser/parser";
 
 import Header from "./components/Header";
 import Toolbar from "./components/Toolbar";
@@ -41,9 +42,13 @@ const handleFileSelected = (event) => {
     setMipsCode(starterCode);
   };
 
-  const handleGenerate = () => {
-    alert("Flowchart generation coming in Phase 3!");
-  };
+ const handleGenerate = () => {
+
+    const result = parse(mipsCode);
+
+    console.log(result);
+
+};
 
   const handleClear = () => {
     setMipsCode("");
