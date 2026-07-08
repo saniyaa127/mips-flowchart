@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import Header from "./components/Header";
 import Toolbar from "./components/Toolbar";
@@ -17,10 +17,25 @@ function App() {
     syscall`;
 
   const [mipsCode, setMipsCode] = useState(starterCode);
+  
+  const fileInputRef = useRef(null);
+  
+ const handleOpen = () => {
+    fileInputRef.current.click();
+};
+const handleFileSelected = (event) => {
+    const file = event.target.files[0];
 
-  const handleOpen = () => {
-    alert("Open File coming in Phase 2!");
-  };
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+        setMipsCode(e.target.result);
+    };
+
+    reader.readAsText(file);
+};
 
   const handleLoadExample = () => {
     setMipsCode(starterCode);
@@ -37,6 +52,13 @@ function App() {
   return (
     <div className="app">
       <Header />
+      <input
+        type="file"
+        accept=".asm,.txt"
+        ref={fileInputRef}
+        onChange={handleFileSelected}
+        style={{ display: "none" }}
+      />
 
       <Toolbar
         onOpen={handleOpen}
