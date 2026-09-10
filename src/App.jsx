@@ -2,12 +2,14 @@ import { useRef, useState } from "react";
 import { parse } from "./parser/parser";
 import { generateFlowchart } from "./parser/flowchartGenerator";
 import { buildLabelTable } from "./parser/labelTable";
+import { resolveBranches } from "./parser/branchResolver";
+
 
 import Header from "./components/Header";
 import Toolbar from "./components/Toolbar";
 import CodeEditor from "./components/CodeEditor";
 import FlowchartCanvas from "./components/FlowchartCanvas";
-import ExplanationPanel from "./components/ExplanationPanel";
+// import ExplanationPanel from "./components/ExplanationPanel";
 
 import "./index.css";
 
@@ -26,7 +28,8 @@ function App() {
     edges: [],
 });
 
-  const fileInputRef = useRef(null);
+
+ const fileInputRef = useRef(null);
   
  const handleOpen = () => {
     fileInputRef.current.click();
@@ -56,11 +59,9 @@ const handleGenerate = () => {
 
   const labels = buildLabelTable(parsed);
 
-  console.log("Label Table:", labels);
+  const branches = resolveBranches(parsed, labels);
 
-  const chart = generateFlowchart(parsed);
-
-  console.log("Generated Flowchart:", chart);
+  const chart = generateFlowchart(parsed, branches);
 
   setFlowchart(chart);
 };
@@ -98,7 +99,7 @@ const handleGenerate = () => {
         />
       </main>
 
-      <ExplanationPanel />
+      {/* <ExplanationPanel /> */}
     </div>
   );
 }
