@@ -1,5 +1,5 @@
 import { MarkerType } from "reactflow";
-import { layoutFlowchart } from "./layoutFlowchart";
+import { layoutFlowchart } from "./layoutflowchart";
 import { instructionMap } from "./instructionMap";
 import { createProcessNode } from "./generators/processNode";
 import { createDecisionNode } from "./generators/decisionNode";
