@@ -1,5 +1,7 @@
+import { instructionMap } from "./instructionMap";
+
 export function resolveBranches(parsedInstructions, labelTable) {
-    const branches = {};
+    const branchTable = {};
 
     for (let i = 0; i < parsedInstructions.length; i++) {
         const instruction = parsedInstructions[i];
@@ -8,68 +10,93 @@ export function resolveBranches(parsedInstructions, labelTable) {
             continue;
         }
 
-        // Find the next executable instruction
-        const nextInstruction = parsedInstructions
-            .slice(i + 1)
-            .find(item => item.type === "instruction");
+        const opcode = instruction.opcode?.toLowerCase();
+        const info = instructionMap[opcode];
 
-        switch (instruction.opcode) {
+        // Find the next actual instruction
+        let nextInstruction = null;
 
-            // --------------------------------
-            // Unconditional jump
-            // --------------------------------
-
-            case "j": {
-                const targetLabel = instruction.operands[0];
-
-                const target = labelTable[targetLabel];
-
-                branches[instruction.id] = {
-                    type: "jump",
-                    target,
-                };
-
+        for (let j = i + 1; j < parsedInstructions.length; j++) {
+            if (parsedInstructions[j].type === "instruction") {
+                nextInstruction = parsedInstructions[j];
                 break;
             }
+        }
 
-            // --------------------------------
-            // Conditional branches
-            // --------------------------------
+        /*
+         * No instruction metadata:
+         * Treat it as a normal sequential instruction.
+         */
+        if (!info || !info.controlFlow) {
+            branchTable[instruction.id] = {
+                type: "normal",
+                next: nextInstruction?.id || null,
+            };
 
-            case "beq":
-            case "bne":
-            case "blt": {
-                const targetLabel = instruction.operands[2];
+            continue;
+        }
 
-                branches[instruction.id] = {
+        switch (info.controlFlow) {
+
+            case "conditional": {
+                const targetLabel =
+                    instruction.operands?.[info.targetOperand];
+
+                const targetId = labelTable[targetLabel];
+
+                branchTable[instruction.id] = {
                     type: "branch",
-
-                    trueTarget:
-                        labelTable[targetLabel] ?? null,
-
-                    falseTarget:
-                        nextInstruction?.id ?? null,
+                    trueTarget: targetId || null,
+                    falseTarget: nextInstruction?.id || null,
                 };
 
                 break;
             }
 
-            // --------------------------------
-            // Normal instruction
-            // --------------------------------
+            case "unconditional": {
+                const targetLabel =
+                    instruction.operands?.[info.targetOperand];
+
+                const targetId = labelTable[targetLabel];
+
+                branchTable[instruction.id] = {
+                    type: "jump",
+                    target: targetId || null,
+                };
+
+                break;
+            }
+
+            case "call": {
+                const targetLabel =
+                    instruction.operands?.[info.targetOperand];
+
+                const targetId = labelTable[targetLabel];
+
+                branchTable[instruction.id] = {
+                    type: "call",
+                    target: targetId || null,
+                };
+
+                break;
+            }
+
+            case "return": {
+                branchTable[instruction.id] = {
+                    type: "return",
+                };
+
+                break;
+            }
 
             default: {
-                branches[instruction.id] = {
+                branchTable[instruction.id] = {
                     type: "normal",
-                    next: nextInstruction?.id ?? null,
+                    next: nextInstruction?.id || null,
                 };
-
-                break;
             }
         }
     }
 
-    console.log("Branch Table:", branches);
-
-    return branches;
+    return branchTable;
 }

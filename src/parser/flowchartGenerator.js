@@ -1,38 +1,142 @@
 import { MarkerType } from "reactflow";
-
 import { layoutFlowchart } from "./layoutFlowchart";
 import { instructionMap } from "./instructionMap";
 import { createProcessNode } from "./generators/processNode";
 import { createDecisionNode } from "./generators/decisionNode";
 
-export function generateFlowchart(parsedInstructions, branchTable) {
+function getNextInstruction(instructions, index) {
+    for (let i = index + 1; i < instructions.length; i++) {
+        if (instructions[i].type === "instruction") {
+            return instructions[i];
+        }
+    }
+    return null;
+}
+
+function normalizeLabel(label) {
+    return label ? label.trim().replace(/:$/, "") : "";
+}
+
+function buildLabelTable(instructions) {
+    const table = {};
+
+    instructions.forEach((item, index) => {
+        if (item.type !== "label") return;
+
+        const label = normalizeLabel(item.name);
+        if (!label) return;
+
+        for (let i = index + 1; i < instructions.length; i++) {
+            if (instructions[i].type === "instruction") {
+                table[label] = instructions[i].id;
+                break;
+            }
+        }
+    });
+
+    return table;
+}
+
+function resolveControlFlow(instructions) {
+    const table = {};
+    const labels = buildLabelTable(instructions);
+
+    instructions.forEach((instruction, index) => {
+        if (instruction.type !== "instruction") return;
+
+        const opcode = instruction.opcode?.toLowerCase();
+        const info = instructionMap[opcode];
+        const next = getNextInstruction(instructions, index);
+
+        if (!info?.controlFlow) {
+            table[instruction.id] = {
+                type: "normal",
+                next: next?.id || null
+            };
+            return;
+        }
+
+        if (info.controlFlow === "conditional") {
+            const label = normalizeLabel(
+                instruction.operands?.[info.targetOperand]
+            );
+
+            table[instruction.id] = {
+                type: "branch",
+                trueTarget: labels[label] || null,
+                falseTarget: next?.id || null
+            };
+            return;
+        }
+
+        if (info.controlFlow === "unconditional") {
+            const label = normalizeLabel(
+                instruction.operands?.[info.targetOperand]
+            );
+
+            table[instruction.id] = {
+                type: "jump",
+                target: labels[label] || null
+            };
+            return;
+        }
+
+        if (info.controlFlow === "call") {
+            const label = normalizeLabel(
+                instruction.operands?.[info.targetOperand]
+            );
+
+            table[instruction.id] = {
+                type: "call",
+                target: labels[label] || null
+            };
+            return;
+        }
+
+        if (info.controlFlow === "return") {
+            table[instruction.id] = { type: "return" };
+            return;
+        }
+
+        table[instruction.id] = {
+            type: "normal",
+            next: next?.id || null
+        };
+    });
+
+    return table;
+}
+
+function createArrow(source, target, id, extra = {}) {
+    return {
+        id,
+        source,
+        target,
+        type: "smoothstep",
+        markerEnd: {
+            type: MarkerType.ArrowClosed
+        },
+        ...extra
+    };
+}
+
+export function generateFlowchart(parsedInstructions, labelTable) {
     const nodes = [];
     const edges = [];
     const nodeMap = {};
+    const branchTable = resolveControlFlow(parsedInstructions);
 
     const CENTER_X = 300;
     const VERTICAL_SPACING = 140;
 
     let y = 0;
 
-    // --------------------------------
     // Start
-    // --------------------------------
-
     nodes.push({
         id: "start",
-
-        position: {
-            x: CENTER_X,
-            y,
-        },
-
-        data: {
-            label: "Start",
-        },
-
+        position: { x: CENTER_X, y },
+        data: { label: "Start" },
         type: "input",
-
         style: {
             width: 360,
             height: 120,
@@ -42,88 +146,39 @@ export function generateFlowchart(parsedInstructions, branchTable) {
             alignItems: "center",
             justifyContent: "center",
             textAlign: "center",
-            boxSizing: "border-box",
-        },
+            boxSizing: "border-box"
+        }
     });
 
     y += VERTICAL_SPACING;
 
-    // --------------------------------
-    // Create instruction nodes
-    // --------------------------------
-
+    // Instruction nodes
     parsedInstructions.forEach((instruction, index) => {
-        if (instruction.type !== "instruction") {
-            return;
-        }
+        if (instruction.type !== "instruction") return;
 
-        const id = `node-${index}`;
+        const nodeId = `node-${index}`;
+        nodeMap[instruction.id] = nodeId;
 
-        // Connect the original instruction ID
-        // to the generated React Flow node ID
-        nodeMap[instruction.id] = id;
+        const opcode = instruction.opcode?.toLowerCase();
+        const info = instructionMap[opcode] || { shape: "process" };
 
-        const info = instructionMap[instruction.opcode] || {
-            shape: "process",
-            description: "Unknown instruction",
-        };
+        const node =
+            info.shape === "decision"
+                ? createDecisionNode(instruction, nodeId, y)
+                : createProcessNode(instruction, nodeId, y);
 
-        let node;
-
-        // --------------------------------
-        // Decision nodes
-        // --------------------------------
-
-        if (
-            instruction.opcode === "beq" ||
-            instruction.opcode === "bne" ||
-            instruction.opcode === "blt"
-        ) {
-            node = createDecisionNode(
-                instruction,
-                id,
-                y
-            );
-        }
-
-        // --------------------------------
-        // Normal process nodes
-        // --------------------------------
-
-        else {
-            node = createProcessNode(
-                instruction,
-                id,
-                y
-            );
-        }
-
-        // Keep nodes centered initially
         node.position.x = CENTER_X;
-
         nodes.push(node);
 
         y += VERTICAL_SPACING;
     });
 
-    // --------------------------------
     // End
-    // --------------------------------
-
     nodes.push({
         id: "end",
-
-        position: {
-            x: CENTER_X,
-            y,
-        },
-
-        data: {
-            label: "End",
-        },
-
+        position: { x: CENTER_X, y },
+        data: { label: "End" },
         type: "output",
-
         style: {
             width: 360,
             height: 120,
@@ -133,275 +188,169 @@ export function generateFlowchart(parsedInstructions, branchTable) {
             alignItems: "center",
             justifyContent: "center",
             textAlign: "center",
-            boxSizing: "border-box",
-        },
+            boxSizing: "border-box"
+        }
     });
 
-    // --------------------------------
-    // Position branch targets
-    // --------------------------------
-
-    for (const instruction of parsedInstructions) {
-        if (instruction.type !== "instruction") {
-            continue;
-        }
-
-        const branch = branchTable[instruction.id];
-
-        if (!branch || branch.type !== "branch") {
-            continue;
-        }
-
-        const sourceId = nodeMap[instruction.id];
-
-        const sourceNode = nodes.find(
-            node => node.id === sourceId
-        );
-
-        if (!sourceNode) {
-            continue;
-        }
-
-        const branchY = sourceNode.position.y + 220;
-
-        // --------------------------------
-        // TRUE / YES target
-        // --------------------------------
-
-        if (branch.trueTarget) {
-            const targetId = nodeMap[branch.trueTarget];
-
-            const targetNode = nodes.find(
-                node => node.id === targetId
-            );
-
-            if (targetNode) {
-                targetNode.position.x = 50;
-                targetNode.position.y = branchY;
-            }
-        }
-
-        // --------------------------------
-        // FALSE / NO target
-        // --------------------------------
-
-        if (branch.falseTarget) {
-            const targetId = nodeMap[branch.falseTarget];
-
-            const targetNode = nodes.find(
-                node => node.id === targetId
-            );
-
-            if (targetNode) {
-                targetNode.position.x = 650;
-                targetNode.position.y = branchY;
-            }
-        }
-    }
-
-    // --------------------------------
-    // Connect Start
-    // --------------------------------
-
+    // Start edge
     const firstInstruction = parsedInstructions.find(
         item => item.type === "instruction"
     );
 
     if (firstInstruction) {
-        edges.push({
-            id: "edge-start",
-
-            source: "start",
-
-            target: nodeMap[firstInstruction.id],
-
-            type: "smoothstep",
-
-            markerEnd: {
-                type: MarkerType.ArrowClosed,
-            },
-        });
+        edges.push(
+            createArrow(
+                "start",
+                nodeMap[firstInstruction.id],
+                "edge-start"
+            )
+        );
     }
 
-    // --------------------------------
-    // Create control-flow edges
-    // --------------------------------
-
+    // Control-flow edges
     for (const instruction of parsedInstructions) {
-        if (instruction.type !== "instruction") {
-            continue;
-        }
+        if (instruction.type !== "instruction") continue;
 
         const branch = branchTable[instruction.id];
-
-        if (!branch) {
-            continue;
-        }
-
         const source = nodeMap[instruction.id];
 
-        if (!source) {
+        if (!branch || !source) continue;
+
+        // Normal
+        if (branch.type === "normal") {
+            if (branch.next) {
+                const target = nodeMap[branch.next];
+
+                if (target) {
+                    edges.push(
+                        createArrow(
+                            source,
+                            target,
+                            `${source}-${target}`
+                        )
+                    );
+                }
+            } else {
+                edges.push(
+                    createArrow(
+                        source,
+                        "end",
+                        `${source}-end`
+                    )
+                );
+            }
+
             continue;
         }
 
-        switch (branch.type) {
+        // Jump
+        if (branch.type === "jump") {
+            const target = nodeMap[branch.target];
 
-            // --------------------------------
-            // Normal instruction
-            // --------------------------------
-
-            case "normal":
-
-                if (branch.next) {
-                    edges.push({
-                        id: `${source}-${nodeMap[branch.next]}`,
-
+            if (target) {
+                edges.push(
+                    createArrow(
                         source,
+                        target,
+                        `${source}-${target}-jump`
+                    )
+                );
+            }
 
-                        target: nodeMap[branch.next],
+            continue;
+        }
 
-                        type: "smoothstep",
+        // Function call
+        if (branch.type === "call") {
+            const target = nodeMap[branch.target];
 
-                        markerEnd: {
-                            type: MarkerType.ArrowClosed,
-                        },
-                    });
-                }
-
-                else {
-                    edges.push({
-                        id: `${source}-end`,
-
+            if (target) {
+                edges.push(
+                    createArrow(
                         source,
+                        target,
+                        `${source}-${target}-call`
+                    )
+                );
+            }
 
-                        target: "end",
+            continue;
+        }
 
-                        type: "smoothstep",
+        // Conditional branch
+        if (branch.type === "branch") {
+            if (branch.trueTarget) {
+                const target = nodeMap[branch.trueTarget];
 
-                        markerEnd: {
-                            type: MarkerType.ArrowClosed,
-                        },
-                    });
+                if (target) {
+                    edges.push(
+                        createArrow(
+                            source,
+                            target,
+                            `${source}-true`,
+                            {
+                                sourceHandle: "yes",
+                                label: "Yes",
+                                labelStyle: {
+                                    fontSize: 30,
+                                    fontWeight: "bold",
+                                    color: "black"
+                                },
+                                labelBgStyle: {
+                                    fill: "white",
+                                    fillOpacity: 1
+                                },
+                                labelBgPadding: [20, 12],
+                                labelBgBorderRadius: 8
+                            }
+                        )
+                    );
                 }
+            }
 
-                break;
+            if (branch.falseTarget) {
+                const target = nodeMap[branch.falseTarget];
 
-            // --------------------------------
-            // Unconditional jump
-            // --------------------------------
-
-            case "jump":
-
-                if (branch.target) {
-                    edges.push({
-                        id: `${source}-${nodeMap[branch.target]}`,
-
-                        source,
-
-                        target: nodeMap[branch.target],
-
-                        type: "smoothstep",
-
-                        markerEnd: {
-                            type: MarkerType.ArrowClosed,
-                        },
-                    });
+                if (target) {
+                    edges.push(
+                        createArrow(
+                            source,
+                            target,
+                            `${source}-false`,
+                            {
+                                sourceHandle: "no",
+                                label: "No",
+                                labelStyle: {
+                                    fontSize: 30,
+                                    fontWeight: "bold",
+                                    color: "black"
+                                },
+                                labelBgStyle: {
+                                    fill: "white",
+                                    fillOpacity: 1
+                                },
+                                labelBgPadding: [20, 12],
+                                labelBgBorderRadius: 8
+                            }
+                        )
+                    );
                 }
+            }
 
-                break;
+            continue;
+        }
 
-            // --------------------------------
-            // Conditional branch
-            // --------------------------------
-
-            case "branch":
-
-                // YES branch
-                if (branch.trueTarget) {
-                    edges.push({
-                        id: `${source}-true`,
-
-                        source,
-
-                        sourceHandle: "yes",
-
-                        target: nodeMap[branch.trueTarget],
-
-                        label: "Yes",
-
-                        type: "smoothstep",
-
-                        markerEnd: {
-                            type: MarkerType.ArrowClosed,
-                        },
-
-                        labelStyle: {
-                            fontSize: 30,
-                            fontWeight: "bold",
-                            color: "black",
-                        },
-
-                        labelBgStyle: {
-                            fill: "white",
-                            fillOpacity: 1,
-                        },
-
-                        labelBgPadding: [20, 12],
-
-                        labelBgBorderRadius: 8,
-                    });
-                }
-
-                // NO branch
-                if (branch.falseTarget) {
-                    edges.push({
-                        id: `${source}-false`,
-
-                        source,
-
-                        sourceHandle: "no",
-
-                        target: nodeMap[branch.falseTarget],
-
-                        label: "No",
-
-                        type: "smoothstep",
-
-                        markerEnd: {
-                            type: MarkerType.ArrowClosed,
-                        },
-
-                        labelStyle: {
-                            fontSize: 30,
-                            fontWeight: "bold",
-                            color: "black",
-                        },
-
-                        labelBgStyle: {
-                            fill: "white",
-                            fillOpacity: 1,
-                        },
-
-                        labelBgPadding: [20, 12],
-
-                        labelBgBorderRadius: 8,
-                    });
-                }
-
-                break;
-
-            // --------------------------------
-            // Unknown branch type
-            // --------------------------------
-
-            default:
-                break;
+        // Return
+        if (branch.type === "return") {
+            edges.push(
+                createArrow(
+                    source,
+                    "end",
+                    `${source}-end-return`
+                )
+            );
         }
     }
-
-    // --------------------------------
-    // Apply layout
-    // --------------------------------
 
     layoutFlowchart(
         nodes,
@@ -409,12 +358,5 @@ export function generateFlowchart(parsedInstructions, branchTable) {
         branchTable
     );
 
-    // --------------------------------
-    // Return flowchart
-    // --------------------------------
-
-    return {
-        nodes,
-        edges,
-    };
+    return { nodes, edges };
 }
